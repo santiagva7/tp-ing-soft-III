@@ -1,0 +1,183 @@
+# ===========================
+# Variables de entorno y secretos
+# ===========================
+.env
+.env.*
+*.env
+!.env.example
+.envrc
+
+# Archivos de configuración con credenciales
+secrets/
+*.key
+*.pem
+*.crt
+*.cert
+*.p12
+*.pfx
+
+# ===========================
+# Python
+# ===========================
+# Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribución / empaquetado
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Entornos virtuales
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+.virtualenv/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Pytest
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# Poetry
+poetry.lock
+
+# ===========================
+# IDEs y Editores
+# ===========================
+# VS Code
+.vscode/
+*.code-workspace
+.history/
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Visual Studio
+.vs/
+
+# ===========================
+# Docker
+# ===========================
+# No ignorar docker-compose, pero sí archivos de override locales
+docker-compose.override.yml
+.dockerignore
+
+# ===========================
+# Logs y datos temporales
+# ===========================
+*.log
+logs/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ===========================
+# OpenTelemetry / Observability
+# ===========================
+# Datos de telemetría locales
+telemetry-data/
+otel-data/
+traces/
+metrics/
+logs/
+
+# ===========================
+# Kubernetes
+# ===========================
+*.kubeconfig
+kubeconfig
+.kube/config
+
+# ===========================
+# Terraform (si lo usas)
+# ===========================
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# ===========================
+# Node.js (si tienes frontend)
+# ===========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# ===========================
+# Sistema operativo
+# ===========================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*

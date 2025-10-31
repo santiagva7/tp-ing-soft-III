@@ -23,9 +23,9 @@ processors:
       - key: collector.name
         value: central-collector
         action: insert
-      - key: processed_at
+      - key: environment
+        value: production
         action: insert
-        value: ${env:TIMESTAMP}
   
   # Filtrar datos sin customer_id (multi-tenancy)
   filter:
@@ -34,7 +34,7 @@ processors:
       span:
         - 'attributes["customer.id"] == nil'
     metrics:
-      metric:
+      datapoint:  # Filtrar a nivel de datapoint es más eficiente
         - 'resource.attributes["customer.id"] == nil'
   
   # Limitar uso de memoria

@@ -1,108 +1,92 @@
 """
-Script simple para probar el OpenTelemetry Collector
-Envía trazas y métricas al collector en localhost:4317
+Script SIMPLIFICADO para probar el OpenTelemetry Collector
+Solo envía métricas básicas de CPU y RAM (fácil de leer)
 """
 
-from opentelemetry import trace, metrics
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry import metrics
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
 from opentelemetry.sdk.resources import Resource
+import psutil
 import time
 
 def main():
-    print("🚀 Iniciando prueba del OpenTelemetry Collector...")
+    print("🚀 Iniciando prueba SIMPLIFICADA del Collector...")
+    print("📊 Solo CPU y RAM (fácil de leer)\n")
     
-    # Configurar recurso (metadatos de la aplicación)
+    # Configurar recurso con customer_id (requerido por el filtro del collector)
     resource = Resource.create({
-        "service.name": "test-app",
-        "service.version": "1.0.0",
-        "deployment.environment": "dev"
+        "service.name": "test-node",
+        "customer.id": "customer-123"  # ⚠️ REQUERIDO por el filtro multi-tenancy
     })
     
-    # === CONFIGURAR TRAZAS ===
-    print("📊 Configurando exportador de trazas (OTLP gRPC)...")
-    trace_exporter = OTLPSpanExporter(
-        endpoint="localhost:4317",
-        insecure=True  # Sin TLS para pruebas locales
-    )
-    
-    tracer_provider = TracerProvider(resource=resource)
-    tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-    trace.set_tracer_provider(tracer_provider)
-    tracer = trace.get_tracer(__name__)
-    
     # === CONFIGURAR MÉTRICAS ===
-    print("📈 Configurando exportador de métricas (OTLP gRPC)...")
-    metric_exporter = OTLPMetricExporter(
-        endpoint="localhost:4317",
-        insecure=True
-    )
-    
-    metric_reader = PeriodicExportingMetricReader(
-        exporter=metric_exporter,
-        export_interval_millis=5000  # Exportar cada 5 segundos
-    )
-    
-    meter_provider = MeterProvider(
-        resource=resource,
-        metric_readers=[metric_reader]
-    )
-    metrics.set_meter_provider(meter_provider)
-    meter = metrics.get_meter(__name__)
-    
-    # Crear métricas de ejemplo
-    request_counter = meter.create_counter(
-        "http.requests",
-        description="Total de requests HTTP",
-        unit="1"
-    )
-    
-    response_time = meter.create_histogram(
-        "http.response.time",
-        description="Tiempo de respuesta HTTP",
-        unit="ms"
-    )
-    
-    # === ENVIAR DATOS DE PRUEBA ===
-    print("\n✨ Enviando datos de telemetría al collector...\n")
-    
-    for i in range(5):
-        print(f"🔄 Iteración {i+1}/5")
+    print("� Configurando exportador de métricas (OTLP gRPC)...")
+    try:
+        metric_exporter = OTLPMetricExporter(
+            endpoint="localhost:4317",
+            insecure=True
+        )
         
-        # Crear una traza (span) de ejemplo
-        with tracer.start_as_current_span("test-operation") as span:
-            span.set_attribute("iteration", i)
-            span.set_attribute("test.type", "smoke-test")
+        metric_reader = PeriodicExportingMetricReader(
+            exporter=metric_exporter,
+            export_interval_millis=3000  # Exportar cada 3 segundos
+        )
+        
+        meter_provider = MeterProvider(
+            resource=resource,
+            metric_readers=[metric_reader]
+        )
+        metrics.set_meter_provider(meter_provider)
+        meter = metrics.get_meter(__name__)
+        
+        print("✅ Conexión al collector establecida\n")
+    except Exception as e:
+        print(f"❌ Error conectando al collector: {e}")
+        print("💡 Verifica que el collector esté corriendo en localhost:4317")
+        return
+    
+    # Crear solo 2 métricas: CPU y RAM usando Gauge (valores instantáneos)
+    # ObservableGauge lee el valor automáticamente cuando se exporta
+    cpu_gauge = meter.create_observable_gauge(
+        name="system.cpu.percent",
+        description="Porcentaje de CPU usado",
+        unit="%",
+        callbacks=[lambda options: [metrics.Observation(psutil.cpu_percent(interval=0.1))]]
+    )
+    
+    memory_gauge = meter.create_observable_gauge(
+        name="system.memory.percent",
+        description="Porcentaje de RAM usada",
+        unit="%",
+        callbacks=[lambda options: [metrics.Observation(psutil.virtual_memory().percent)]]
+    )
+    
+    # === ENVIAR DATOS ===
+    print("✨ Las métricas se exportan automáticamente cada 3 segundos...\n")
+    print("💡 ObservableGauge lee CPU/RAM cuando el MetricReader las solicita\n")
+    
+    try:
+        for i in range(10):
+            # Los gauges se leen automáticamente, solo mostramos los valores
+            cpu = psutil.cpu_percent(interval=1)
+            memory = psutil.virtual_memory().percent
             
-            # Simular trabajo
-            time.sleep(0.5)
+            print(f"📊 Iteración {i+1}/10  →  CPU: {cpu:.1f}%  |  RAM: {memory:.1f}%")
             
-            # Crear un span hijo
-            with tracer.start_as_current_span("sub-operation") as child_span:
-                child_span.set_attribute("nested", True)
-                time.sleep(0.2)
-        
-        # Registrar métricas
-        request_counter.add(1, {"method": "GET", "endpoint": "/test"})
-        response_time.record(150 + (i * 10), {"method": "GET", "status": "200"})
-        
-        print(f"  ✅ Traza enviada: test-operation")
-        print(f"  ✅ Métrica enviada: http.requests +1")
-        print(f"  ✅ Métrica enviada: http.response.time {150 + (i * 10)}ms\n")
-        
-        time.sleep(1)
+            time.sleep(2)  # Esperar 2 segundos
     
-    # Esperar a que se exporten las métricas finales
-    print("⏳ Esperando a que se exporten las métricas finales...")
-    time.sleep(6)
+    except KeyboardInterrupt:
+        print("\n⚠️  Interrumpido por el usuario")
+    
+    # Esperar última exportación
+    print("\n⏳ Esperando última exportación...")
+    time.sleep(4)
     
     print("\n✅ ¡Prueba completada!")
-    print("\n📋 Revisa los logs del collector (debería mostrar las trazas y métricas con 'debug' exporter)")
-    print("   Para ver los logs: docker logs -f otel-collector")
+    print("\n📋 Verificar en el collector:")
+    print("   docker logs collector-otel-collector-1 | Select-Object -Last 80")
 
 if __name__ == "__main__":
     try:

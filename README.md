@@ -218,15 +218,26 @@ tp-ing-soft-III/
 │   │   ├── test_collector.py          # Tests del collector
 │   │   └── requirements.txt           # Dependencias Python
 │   │
-│   └── storage/                       # Capa de almacenamiento híbrido
-│       ├── README.md                  # Documentación del storage
-│       ├── docker-compose.yaml        # (Futuro) Prometheus + Cassandra
-│       ├── prometheus/
-│       │   └── prometheus.yml         # (Futuro) Config Prometheus
-│       ├── cassandra/
-│       │   └── schema.cql             # (Futuro) Esquema de tablas
-│       └── grafana/
-│           └── dashboards/            # (Futuro) Dashboards preconfigured
+│   ├── storage/                       # Capa de almacenamiento híbrido
+│   │   ├── README.md                  # Documentación del storage
+│   │   ├── docker-compose.yaml        # (Futuro) Prometheus + Cassandra
+│   │   ├── prometheus/
+│   │   │   └── prometheus.yml         # (Futuro) Config Prometheus
+│   │   ├── cassandra/
+│   │   │   └── schema.cql             # (Futuro) Esquema de tablas
+│   │   └── grafana/
+│   │       └── dashboards/            # (Futuro) Dashboards preconfigured
+│   │
+│   └── monitor/                       # Dashboard de observabilidad
+│       ├── README.md                  # Documentación del dashboard
+│       ├── docker-compose.yaml        # (Futuro) Grafana + configs
+│       ├── grafana/
+│       │   ├── dashboards/            # (Futuro) Dashboards JSON
+│       │   ├── datasources/           # (Futuro) Datasources config
+│       │   └── alerting/              # (Futuro) Alerting rules
+│       └── prometheus/
+│           ├── prometheus.yml         # (Futuro) Prometheus config
+│           └── alerts/                # (Futuro) Alert rules
 │
 └── docs/                              # (Futuro) Documentación adicional
     ├── architecture.md
@@ -341,6 +352,8 @@ Lógica en Grafana que enruta queries automáticamente:
 
 ### 4. **Grafana (Visualización Multi-tenant)**
 
+**Ubicación**: `services/monitor/`
+
 **Descripción**: Dashboard centralizado con separación por cliente.
 
 **Características**:
@@ -355,6 +368,9 @@ Lógica en Grafana que enruta queries automáticamente:
 2. **Vista por Cliente**: Métricas detalladas de todos sus nodos
 3. **Vista por Nodo**: Drill-down de un nodo específico
 4. **Alertas**: Dashboard de alertas activas
+5. **Infraestructura (SRE)**: Vista técnica del sistema completo
+
+**Ver**: [services/monitor/README.md](services/monitor/README.md)
 
 ---
 
@@ -784,12 +800,14 @@ cd tests/integration
 
 ## 📚 Documentación Adicional
 
-- **[Agent README](services/agent/README.md)**: Detalles del agente Go
-- **[Collector README](services/collector/README.md)**: Configuración del collector
-- **[Storage README](services/storage/README.md)**: Arquitectura híbrida de almacenamiento
+- **[Agent README](services/agent/README.md)**: Detalles del agente Go con SDK OpenTelemetry
+- **[Collector README](services/collector/README.md)**: Configuración del collector central
+- **[Storage README](services/storage/README.md)**: Arquitectura híbrida de almacenamiento (Prometheus + Cassandra)
+- **[Monitor README](services/monitor/README.md)**: Dashboard de observabilidad multi-tenant con Grafana
 - **[OpenTelemetry Docs](https://opentelemetry.io/docs/)**: Documentación oficial
 - **[Prometheus Docs](https://prometheus.io/docs/)**: Documentación de Prometheus
 - **[Cassandra Docs](https://cassandra.apache.org/doc/)**: Documentación de Cassandra
+- **[Grafana Docs](https://grafana.com/docs/)**: Documentación de Grafana
 
 ---
 

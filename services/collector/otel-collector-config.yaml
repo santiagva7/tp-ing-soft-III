@@ -1,5 +1,8 @@
 # otel-collector-config.yaml
+# OpenTelemetry Collector - Configuración Central
+
 receivers:
+  # Recibir telemetría de agentes vía OTLP
   otlp:
     protocols:
       grpc:
@@ -8,23 +11,86 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
+  # Agrupar datos en lotes para eficiencia
   batch:
+    timeout: 10s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+  
+  # Agregar metadata adicional
+  attributes:
+    actions:
+      - key: collector.name
+        value: central-collector
+        action: insert
+      - key: processed_at
+        action: insert
+        value: ${env:TIMESTAMP}
+  
+  # Filtrar datos sin customer_id (multi-tenancy)
+  filter:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["customer.id"] == nil'
+    metrics:
+      metric:
+        - 'resource.attributes["customer.id"] == nil'
+  
+  # Limitar uso de memoria
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
 
 exporters:
+  # Exportar para debugging
   debug:
-    verbosity: detailed # Muestra todo el detalle de lo que recibe
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+  
+  # Exportar métricas a Prometheus (hot storage)
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: "customer_monitoring"
+    const_labels:
+      environment: "production"
+  
+  # Exportar a Cassandra (cold storage) - Requiere adapter
+  # otlphttp/cassandra:
+  #   endpoint: "http://cassandra-adapter:8080/v1/traces"
+  #   tls:
+  #     insecure: true
+
+extensions:
+  # Health check endpoint
+  health_check:
+    endpoint: "0.0.0.0:13133"
+    path: "/health"
+  
+  # Métricas internas del collector
+  zpages:
+    endpoint: "0.0.0.0:55679"
 
 service:
+  extensions: [health_check, zpages]
+  
   pipelines:
+    # Pipeline de trazas
     traces:
       receivers: [otlp]
-      processors: [batch]
-      exporters: [debug]
+      processors: [memory_limiter, attributes, filter, batch]
+      exporters: [debug]  # [debug, otlphttp/cassandra] cuando Cassandra esté configurado
+    
+    # Pipeline de métricas
     metrics:
       receivers: [otlp]
-      processors: [batch]
-      exporters: [debug]
+      processors: [memory_limiter, attributes, filter, batch]
+      exporters: [debug, prometheus]
+    
+    # Pipeline de logs
     logs:
       receivers: [otlp]
-      processors: [batch]
+      processors: [memory_limiter, attributes, batch]
       exporters: [debug]

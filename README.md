@@ -223,10 +223,8 @@ tp-ing-soft-III/
 │   │   ├── docker-compose.yaml        # (Futuro) Prometheus + Cassandra
 │   │   ├── prometheus/
 │   │   │   └── prometheus.yml         # (Futuro) Config Prometheus
-│   │   ├── cassandra/
-│   │   │   └── schema.cql             # (Futuro) Esquema de tablas
-│   │   └── grafana/
-│   │       └── dashboards/            # (Futuro) Dashboards preconfigured
+│   │   └── cassandra/
+│   │       └── schema.cql             # (Futuro) Esquema de tablas
 │   │
 │   └── monitor/                       # Dashboard de observabilidad
 │       ├── README.md                  # Documentación del dashboard

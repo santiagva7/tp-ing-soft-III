@@ -66,16 +66,24 @@ def main():
     # === ENVIAR DATOS ===
     print("✨ Las métricas se exportan automáticamente cada 3 segundos...\n")
     print("💡 ObservableGauge lee CPU/RAM cuando el MetricReader las solicita\n")
+    print("⏱️  El test correrá durante 5 minutos (300 segundos)\n")
+    
+    duration = 300  # 5 minutos en segundos
+    interval = 5    # Mostrar estado cada 5 segundos
+    iterations = duration // interval
     
     try:
-        for i in range(10):
+        for i in range(iterations):
             # Los gauges se leen automáticamente, solo mostramos los valores
             cpu = psutil.cpu_percent(interval=1)
             memory = psutil.virtual_memory().percent
             
-            print(f"📊 Iteración {i+1}/10  →  CPU: {cpu:.1f}%  |  RAM: {memory:.1f}%")
+            elapsed = (i + 1) * interval
+            remaining = duration - elapsed
             
-            time.sleep(2)  # Esperar 2 segundos
+            print(f"📊 {elapsed:03d}s / {duration}s  →  CPU: {cpu:5.1f}%  |  RAM: {memory:5.1f}%  |  Restantes: {remaining:03d}s")
+            
+            time.sleep(interval - 1)  # Esperar (interval - 1) porque cpu_percent ya esperó 1s
     
     except KeyboardInterrupt:
         print("\n⚠️  Interrumpido por el usuario")

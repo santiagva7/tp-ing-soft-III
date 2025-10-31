@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  grafana:
+    image: grafana/grafana:latest
+    container_name: monitor-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    volumes:
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+    networks:
+      - observability
+      - prometeus_default  
+
+networks:
+  observability:
+    driver: bridge
+  prometeus_default:
+    external: true

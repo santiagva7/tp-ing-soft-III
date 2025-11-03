@@ -43,7 +43,41 @@ CUSTOMER_ID=customer-123
 NODE_ENV=development
 ```
 
-## 📁 Estructura
+## 🐳 Docker Deployment
+
+### Build and Run with Docker
+
+```bash
+# Build the image
+docker build -t pulse-ops-node .
+
+# Run the container
+docker run -p 3001:3001 \
+  -e OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:4317 \
+  -e OTEL_SERVICE_NAME=pulse-ops-node \
+  -e CUSTOMER_ID=customer-123 \
+  pulse-ops-node
+```
+
+### Using Docker Compose
+
+```bash
+# Create network (only once)
+docker network create monitoring
+
+# Build and start
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop
+docker compose down
+```
+
+The image uses **standalone output** with multi-stage builds (~110MB final size).
+
+## �📁 Estructura
 
 ```
 pulse-ops-node/
@@ -73,4 +107,6 @@ Al ejecutar `npm run dev` deberías ver:
 ```
 
 Cada 5 segundos verás nuevos logs con las métricas actualizadas.
+
+La aplicación corre en **http://localhost:3001** (puerto 3001).
 

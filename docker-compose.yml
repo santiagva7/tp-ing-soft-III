@@ -1,0 +1,21 @@
+services:
+  cassandra:
+    image: cassandra:latest
+    container_name: pulseops-db
+    ports:
+      - "9042:9042"
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+
+  backend:
+    build: ./backend
+    container_name: pulseops-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - CASSANDRA_HOST=cassandra
+    depends_on:
+      - cassandra
+
+volumes:
+  cassandra-data:

@@ -1,42 +1,73 @@
 version: '3.8'
 
 services:
-  # Nodo Cassandra del agente que se une al cluster principal
+  # Nodo Cassandra del agente - MIEMBRO DEL CLUSTER CENTRAL
   cassandra-agent:
     image: cassandra:5.0
     container_name: pulseops-agent-cassandra
     hostname: cassandra-agent
     environment:
-      # Cluster configuration
-      - CASSANDRA_CLUSTER_NAME=PulseOpsCluster  # MISMO nombre que el cluster principal
-      - CASSANDRA_DC=dc1                         # MISMO datacenter
-      - CASSANDRA_RACK=rack-agent                # Rack único para este agente
-      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      # Cluster configuration - SE UNE AL CLUSTER PRINCIPAL
+      - CASSANDRA_CLUSTER_NAME=PulseOpsCluster       # MISMO nombre que cluster central
+      - CASSANDRA_DC=dc1                              # Mismo datacenter
+      - CASSANDRA_RACK=rack4                          # Rack diferente (high availability)
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch  # Snitch para cluster distribuido
       
-      # Seeds: Los nodos del cluster principal
-      - CASSANDRA_SEEDS=host.docker.internal:9042
+      # Seeds: Nodos del cluster central (para unirse al cluster)
+      - CASSANDRA_SEEDS=cassandra-1,cassandra-2,cassandra-3
       
-      # Recursos limitados (es un agente, no storage pesado)
+      # Recursos ajustados para agente edge
       - HEAP_NEWSIZE=128M
       - MAX_HEAP_SIZE=512M
     ports:
-      - "9043:9042"  # Puerto diferente para no colisionar
+      - "9043:9042"  # Puerto expuesto diferente (interno usa 9042)
     volumes:
       - cassandra-agent-data:/var/lib/cassandra
     deploy:
       resources:
         limits:
-          memory: 1.5g  # Menos memoria que los nodos principales
+          memory: 1.5g
     healthcheck:
       test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 10
-      start_period: 90s  # Más tiempo porque debe conectarse al cluster remoto
-    extra_hosts:
-      # Permitir que este nodo encuentre el cluster principal
-      - "host.docker.internal:host-gateway"
+      start_period: 90s  # Más tiempo para join al cluster remoto
+    networks:
+      - cassandra-net  # MISMO network que el cluster central
     restart: unless-stopped
+
+  # Verificación de join al cluster (el keyspace ya existe en el cluster)
+  cassandra-agent-init:
+    image: cassandra:5.0
+    container_name: pulseops-agent-init
+    command: >
+      bash -c "
+      echo '⏳ Esperando que Cassandra Agent esté listo y unido al cluster...' &&
+      until cqlsh cassandra-agent 9042 -e 'DESCRIBE KEYSPACES' > /dev/null 2>&1; do
+        echo '⏳ Reintentando en 5 segundos...' &&
+        sleep 5;
+      done &&
+      echo '✅ Cassandra Agent conectado!' &&
+      echo '📊 Verificando estado del cluster...' &&
+      cqlsh cassandra-agent 9042 -e 'SELECT * FROM system.peers' &&
+      echo '📊 Verificando keyspace pulseops (debe existir del cluster central)...' &&
+      cqlsh cassandra-agent 9042 -e 'DESCRIBE KEYSPACE pulseops' &&
+      echo '🎉 Nodo agente unido al cluster correctamente!' &&
+      echo '📋 Nodos en el cluster:' &&
+      nodetool -h cassandra-agent status
+      "
+    depends_on:
+      cassandra-agent:
+        condition: service_healthy
+    networks:
+      - cassandra-net
+    restart: "no"
 
 volumes:
   cassandra-agent-data:
+
+networks:
+  cassandra-net:
+    external: true  # Usa el network existente del cluster central
+    name: cassandra_cassandra-net  # Nombre generado por docker-compose del storage

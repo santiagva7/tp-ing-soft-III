@@ -2,18 +2,19 @@
 
 Agente de monitoreo construido con Next.js 16 y OpenTelemetry para recolectar métricas de sistema (CPU, RAM).
 
-**Arquitectura resiliente con persistencia local**: El agente envía métricas a un **OpenTelemetry Collector local** que:
-- Exporta a **Collector Central** (cuando está disponible)
-- Persiste localmente en **Cassandra Agent Node** (para resiliencia offline)
-- Garantiza **no pérdida de datos** mediante replicación automática
+**Arquitectura de cluster distribuido**: El agente tiene un **nodo Cassandra local** que:
+- **Se une al cluster central** como miembro (rack4)
+- **Recibe replicaciones automáticas** vía Gossip Protocol
+- **Permite escrituras locales** que se sincronizan automáticamente
+- **Alta disponibilidad** con RF=3 (datos en 3+ nodos siempre)
 
 ## 🏗️ Arquitectura del Agente
 
-### Flujo de datos completo (con resiliencia)
+### Flujo de datos completo (cluster distribuido)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ AGENT MACHINE                                                       │
+│ AGENT MACHINE (Edge Node)                                          │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  ┌──────────────────┐    OTLP/gRPC (4317)   ┌──────────────────┐  │
@@ -21,30 +22,26 @@ Agente de monitoreo construido con Next.js 16 y OpenTelemetry para recolectar m�
 │  │  (pulse-ops-node)│    localhost:4317      │  (OTel Collector)│  │
 │  └──────────────────┘                        └────────┬─────────┘  │
 │   • CPU metrics                                       │             │
-│   • RAM metrics                              ┌────────┴────────┐   │
-│   • Customer labels                          │  Dual Exporters │   │
-│                                              └────┬──────────┬─┘   │
-│                                                   │          │      │
-│                                                   │          │      │
-│                                      OTLP/gRPC   │          │ HTTP │
-│                                      (retry +    │          │ POST │
-│                                       queue)     │          │      │
-│                                                   │          ▼      │
-│                                                   │    ┌──────────┐ │
-│                                                   │    │ Cassandra│ │
-│                                                   │    │  Adapter │ │
-│                                                   │    └─────┬────┘ │
-│                                                   │          │      │
-│                                                   │          ▼      │
-│                                                   │    ┌──────────┐ │
-│                                                   │    │ Cassandra│ │
-│                                                   │    │  Node    │ │
-│                                                   │    │ (Agent)  │ │
-│                                                   │    └──────────┘ │
-└───────────────────────────────────────────────────┼─────────────────┘
-                                                    │
-                                                    │ Internet/Network
-                                                    ▼
+│   • RAM metrics                                       │             │
+│   • Customer labels                                   │             │
+│                                                       │             │
+│                                            OTLP/gRPC  │             │
+│                                            (primary)  │             │
+│                                                       │             │
+│                                                       ▼             │
+│                                          ┌────────────────────┐    │
+│                                          │ Cassandra Agent    │    │
+│                                          │ (rack4)            │    │
+│                                          │ • Cluster member   │    │
+│                                          │ • Seeds: 1,2,3     │    │
+│                                          │ • Port: 9043       │    │
+│                                          └─────────┬──────────┘    │
+│                                                    │                │
+│                                                    │ Gossip         │
+└────────────────────────────────────────────────────┼────────────────┘
+                                                     │ Protocol
+                                                     │ (Replication)
+                                                     ▼
                               ┌─────────────────────────────────────┐
                               │ CENTRAL INFRASTRUCTURE              │
                               ├─────────────────────────────────────┤
@@ -54,62 +51,84 @@ Agente de monitoreo construido con Next.js 16 y OpenTelemetry para recolectar m�
                               │  └────────┬─────────┘              │
                               │           │                         │
                               │           ▼                         │
-                              │  ┌──────────────────┐              │
-                              │  │   Prometheus     │              │
-                              │  │   (hot storage)  │              │
-                              │  └──────────────────┘              │
+                              │  ┌──────────────────────────────┐  │
+                              │  │ Cassandra Cluster            │  │
+                              │  │ ┌────────┐  ┌────────┐       │  │
+                              │  │ │ Node 1 │  │ Node 2 │       │  │
+                              │  │ │(rack1) │  │(rack2) │       │  │
+                              │  │ └───┬────┘  └────┬───┘       │  │
+                              │  │     │ Gossip     │           │  │
+                              │  │     └──────┬─────┘           │  │
+                              │  │            │                 │  │
+                              │  │       ┌────┴────┐            │  │
+                              │  │       │ Node 3  │            │  │
+                              │  │       │(rack3)  │            │  │
+                              │  │       └────┬────┘            │  │
+                              │  │            │                 │  │
+                              │  │            │ Gossip +        │  │
+                              │  │            │ Replication     │  │
+                              │  │            │                 │  │
+                              │  │       ┌────▼──────────┐      │  │
+                              │  │       │cassandra-agent│      │  │
+                              │  │       │    (rack4)    │◄─────┼──┤
+                              │  │       └───────────────┘      │  │
+                              │  │       Connected to cluster   │  │
+                              │  └──────────────────────────────┘  │
                               │                                     │
-                              │  ┌──────────────────┐              │
-                              │  │ Cassandra Cluster│              │
-                              │  │ (3 nodes: cold)  │◄────────┐    │
-                              │  └──────────────────┘         │    │
-                              │                                │    │
-                              └────────────────────────────────┼────┘
-                                                               │
-                                        Cassandra Gossip Protocol
-                                        (auto-replication)
-                                                               │
-                              ┌────────────────────────────────┘
-                              │
-                              └──► Agent Cassandra Node (replicates data)
+                              │  Keyspace: pulseops                │
+                              │  RF=3 (NetworkTopologyStrategy)    │
+                              │  Datos en 3+ nodos siempre         │
+                              └─────────────────────────────────────┘
+
+NOTA: Cassandra Agent ES MIEMBRO del cluster central
+      Replicación automática vía Gossip Protocol (RF=3)
 ```
 
 ### Comportamiento en diferentes escenarios
 
 #### ✅ Escenario 1: Todo conectado (normal)
+
 1. **App Next.js** → métricas → **Collector Local** (localhost:4317)
-2. **Collector Local** procesa y exporta:
-   - → **Collector Central** (vía OTLP/gRPC con retry queue)
-   - → **Cassandra Adapter** → **Cassandra Agent Node** (local)
-3. **Cassandra Agent Node** replica datos al **Cassandra Cluster** (automático)
-4. **Collector Central** → Prometheus (hot) + Cassandra Cluster (cold)
-5. Resultado: Datos en **Prometheus + Cassandra Cluster + Cassandra Agent**
+2. **Collector Local** → **Central Collector** (primary path) ✅
+3. **Central Collector** → escribe a **Cassandra Cluster** (cualquier nodo)
+4. **Cassandra Gossip** replica automáticamente a todos los nodos (incluido agente)
+5. Resultado: Datos en **3+ nodos** (RF=3), incluyendo el nodo del agente
 
-#### 🔌 Escenario 2: Central offline (sin conexión a internet/central)
-1. **App Next.js** → métricas → **Collector Local** ✅
-2. **Collector Local** intenta exportar a **Collector Central** ❌ (falla)
-3. **Collector Local** guarda en **persistent queue** (disco) para retry
-4. **Collector Local** → **Cassandra Adapter** → **Cassandra Agent Node** ✅ (local)
-5. Resultado: Datos **solo en Cassandra Agent** (persistidos localmente)
-6. Cuando central vuelve: **queue retry** envía datos acumulados al central
+#### 🔌 Escenario 2: Central offline (red desconectada)
 
-#### 💾 Escenario 3: Cassandra Agent offline (falla nodo local)
 1. **App Next.js** → métricas → **Collector Local** ✅
-2. **Collector Local** exporta a **Collector Central** ✅
-3. **Collector Local** intenta → **Cassandra Adapter** ❌ (falla)
-4. Resultado: Datos en **Collector Central** → Prometheus + Cassandra Cluster
-5. Pérdida: Solo la copia local del agente (pero datos siguen en cluster central)
+2. **Collector Local** intenta exportar a **Central Collector** ❌ (falla conexión)
+3. **Persistent queue** guarda métricas en disco (retry automático)
+4. **Collector Local** puede escribir localmente a **Cassandra Agent** (opcional)
+5. Cuando la conexión vuelve:
+   - **Persistent queue** envía métricas acumuladas al central
+   - **Central** escribe al cluster
+   - **Gossip** replica a todos los nodos (sincronización automática)
+6. Resultado: **Consistencia eventual** garantizada por Cassandra
+
+#### 💾 Escenario 3: Nodo agente offline (falla local)
+
+1. **App Next.js** → métricas → **Collector Local** ✅
+2. **Collector Local** → **Central Collector** ✅ (path siempre disponible)
+3. **Central** → escribe a **Cassandra Cluster** (nodos centrales)
+4. **Nodo agente caído** → NO recibe replicaciones temporalmente
+5. Cuando el agente vuelve:
+   - **Gossip Protocol** detecta el nodo
+   - **Hinted handoff** y **read repair** sincronizan datos perdidos
+   - **Consistencia eventual** restaurada automáticamente
+6. Resultado: Sin pérdida de datos, sincronización automática
 
 ### Ventajas de esta arquitectura
 
 | Ventaja | Descripción |
 |---------|-------------|
-| **🛡️ Resiliencia** | Datos no se pierden si central cae (persistent queue + Cassandra local) |
-| **⚡ Baja latencia** | Escritura local en Cassandra Agent (< 5ms), no espera a central |
-| **🔄 Auto-replicación** | Cassandra se encarga de sincronizar agente ↔ cluster automáticamente |
-| **📊 Formato consistente** | Mismo pipeline de procesamiento (local collector = central config) |
-| **🎯 Edge computing** | Cada agente puede operar independientemente |
-| **📈 Escalable** | Agregar agentes = agregar nodos Cassandra al cluster |
+| **🛡️ Alta disponibilidad** | RF=3 + 1 nodo agente = 4 nodos con datos completos |
+| **🔄 Replicación automática** | Gossip Protocol sincroniza todos los nodos sin configuración manual |
+| **⚡ Lecturas locales** | El agente puede leer de su nodo local sin latencia de red |
+| **📊 Consistencia eventual** | Cassandra garantiza sincronización automática (hinted handoff, read repair) |
+| **🎯 Distribución geográfica** | Nodos agente en edge + cluster central = arquitectura multi-región natural |
+| **📈 Escalabilidad** | Agregar agentes = agregar nodos al cluster (scaling horizontal) |
+| **💾 Sin doble escritura** | Una sola escritura se replica automáticamente (no hay duplicados) |
 
 ### Componentes del agente
 
@@ -120,17 +139,25 @@ Agente de monitoreo construido con Next.js 16 y OpenTelemetry para recolectar m�
 2. **Local Collector** (`otel-collector`):
    - Recibe OTLP/gRPC en puerto 4317
    - Aplica procesamiento (batch, attributes, filters)
-   - Exporta dual: central (retry queue) + local (Cassandra)
+   - **Export primario**: Central Collector (con retry + persistent queue)
 
-3. **Cassandra Adapter**:
+3. **Cassandra Agent Node**:
+   - **Miembro del cluster** PulseOpsCluster (rack4)
+   - **Seeds**: cassandra-1, cassandra-2, cassandra-3
+   - **Replicación automática** vía Gossip Protocol
+   - **Lecturas locales** rápidas para el agente
+   - Puerto: 9043 (externo), 9042 (interno cluster)
+
+3. **Cassandra Adapter** (solo en failover):
    - Recibe métricas del collector vía HTTP POST
    - Transforma a schema Cassandra (`pulseops.metrics`)
    - Inserta en Cassandra Agent Node
 
-4. **Cassandra Agent Node**:
-   - Nodo Cassandra que se une al cluster principal
-   - Almacena datos localmente (bajo volumen)
-   - Replica automáticamente al cluster central
+4. **Cassandra Agent Node** (standalone):
+   - Nodo Cassandra **independiente** (NO cluster)
+   - Almacena datos localmente (solo durante failover)
+   - **SimpleStrategy, RF=1** (nodo único)
+   - NO se replica al cluster central (son storages separados)
 
 ## 📋 Prerequisitos
 
@@ -224,7 +251,7 @@ NODE_ENV=production
 
 ### Configuración del Local Collector (TODO)
 
-El collector local (`otel-collector-config.yaml`) debe tener:
+El collector local (`otel-collector-config.yaml`) debe tener **failover exporters**:
 
 **Receivers**:
 - `otlp`: gRPC en puerto 4317 (recibe de la app)
@@ -234,15 +261,69 @@ El collector local (`otel-collector-config.yaml`) debe tener:
 - `attributes`: Agrega labels (customer_id, node_id)
 - `resource`: Detecta hostname, OS, etc.
 
-**Exporters**:
-- `otlp/central`: Envía al collector central
-  - `endpoint`: `http://host.docker.internal:4317` (o IP real)
-  - `retry_on_failure`: enabled
-  - `sending_queue`: persistent (disk-based)
-  - `queue_size`: 5000
-- `otlphttp/cassandra-adapter`: Envía al adapter local
-  - `endpoint`: `http://cassandra-adapter:8080/metrics`
-  - `timeout`: 5s
+**Exporters con Failover**:
+```yaml
+exporters:
+  # PRIMARY: Central Collector
+  otlp/central:
+    endpoint: http://host.docker.internal:4317
+    tls:
+      insecure: true
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 5m
+    sending_queue:
+      enabled: true
+      num_consumers: 2
+      queue_size: 5000
+      storage: file_storage  # Persistent queue
+  
+  # FALLBACK: Cassandra Adapter (solo si central falla)
+  otlphttp/cassandra-adapter:
+    endpoint: http://cassandra-adapter:8080/metrics
+    timeout: 5s
+
+# File storage para persistent queue
+extensions:
+  file_storage:
+    directory: /var/lib/otelcol/file_storage
+    timeout: 10s
+
+# Pipeline con failover
+service:
+  extensions: [file_storage]
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch, attributes, resource]
+      exporters: [otlp/central]  # Solo primary en pipeline normal
+      
+      # Nota: El failover a cassandra-adapter se activa mediante
+      # configuración del exporter, NO en el pipeline.
+      # OpenTelemetry NO tiene soporte nativo para failover exporters.
+      # Alternativa: Usar 2 pipelines con routing processor.
+```
+
+**Implementación de Failover** (requiere configuración avanzada):
+
+Opción A: Usar **routing processor** con health_check:
+```yaml
+processors:
+  routing:
+    from_attribute: fallback_mode  # Set by health_check
+    table:
+      - value: "true"
+        exporters: [otlphttp/cassandra-adapter]
+    default_exporters: [otlp/central]
+```
+
+Opción B: Usar **2 collectors** en cascade (más simple):
+- Collector1: App → OTLP → file queue → Collector2
+- Collector2: Lee queue → intenta central → si falla → Cassandra
+
+**Recomendación**: Usar **Opción B** (2 collectors) por simplicidad.
 
 ### Cassandra Adapter (TODO)
 

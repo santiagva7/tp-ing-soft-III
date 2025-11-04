@@ -1,8 +1,7 @@
 import time
+import os
 from cassandra.cluster import Cluster
 from cassandra.policies import DCAwareRoundRobinPolicy
-from cassandra.auth import PlainTextAuthProvider
-from cassandra.query import SimpleStatement
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -11,9 +10,10 @@ log = logging.getLogger()
 log.setLevel('INFO')
 
 # --- Configuración ---
-CASSANDRA_HOST = 'cassandra'  # Docker expone el puerto 9042 a tu PC
+CASSANDRA_HOSTS = os.environ.get('CASSANDRA_HOSTS', '127.0.0.1').split(',') 
 KEYSPACE = 'pulseops'
-REPLICATION_FACTOR = 1
+REPLICATION_FACTOR = 3
+LOCAL_DC = os.environ.get('CASSANDRA_DC', 'dc1')
 # ---------------------
 
 def create_keyspace(session):
@@ -22,7 +22,7 @@ def create_keyspace(session):
     try:
         session.execute(f"""
             CREATE KEYSPACE IF NOT EXISTS {KEYSPACE}
-            WITH replication = {{ 'class': 'SimpleStrategy', 'replication_factor': {REPLICATION_FACTOR} }}
+            WITH replication = {{ 'class': 'NetworkTopologyStrategy', '{LOCAL_DC}': {REPLICATION_FACTOR} }}
         """)
         log.info("Keyspace creado con éxito.")
     except Exception as e:
@@ -49,8 +49,9 @@ def create_tables(session):
         raise
 
 def main():
-    log.info(f"Intentando conectar a Cassandra en {CASSANDRA_HOST}...")
-    cluster = Cluster([CASSANDRA_HOST])
+    log.info(f"Intentando conectar a clúster de Cassandra en {CASSANDRA_HOSTS}...")
+    cluster = Cluster(contact_points=CASSANDRA_HOSTS,
+                      load_balancing_policy=DCAwareRoundRobinPolicy(local_dc=LOCAL_DC))
     session = None
     
     # Cassandra puede tardar en arrancar. Hacemos 5 reintentos.

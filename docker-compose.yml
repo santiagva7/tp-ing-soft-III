@@ -1,11 +1,72 @@
+version: '3.8'
 services:
-  cassandra:
+  cassandra-1:
     image: cassandra:latest
-    container_name: pulseops-db
+    container_name: pulseops-db-1
+    environment:
+      - CASSANDRA_CLUSTER_NAME=PulseOpsCluster
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - HEAP_NEWSIZE=256M
+      - MAX_HEAP_SIZE=1G 
     ports:
       - "9042:9042"
     volumes:
-      - cassandra-data:/var/lib/cassandra
+      - cassandra-data-1:/var/lib/cassandra
+      - ./backend/config/cassandra-rack.properties:/etc/cassandra/cassandra-rack.properties
+    deploy:
+      resources:
+        limits:
+          memory: 3g #memoria
+
+  cassandra-2:
+    image: cassandra:latest
+    container_name: pulseops-db-2
+    environment:
+      - CASSANDRA_CLUSTER_NAME=PulseOpsCluster
+      - CASSANDRA_SEEDS=cassandra-1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - HEAP_NEWSIZE=256M
+      - MAX_HEAP_SIZE=1G
+    depends_on:
+      - cassandra-1
+    volumes:
+      - cassandra-data-2:/var/lib/cassandra
+      - ./backend/config/cassandra-rack.properties:/etc/cassandra/cassandra-rack.properties
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+
+  cassandra-3:
+    image: cassandra:latest
+    container_name: pulseops-db-3
+    environment:
+      - CASSANDRA_CLUSTER_NAME=PulseOpsCluster
+      - CASSANDRA_SEEDS=cassandra-1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - HEAP_NEWSIZE=256M
+      - MAX_HEAP_SIZE=1G
+    depends_on:
+      - cassandra-1
+    volumes:
+      - cassandra-data-3:/var/lib/cassandra
+      - ./backend/config/cassandra-rack.properties:/etc/cassandra/cassandra-rack.properties
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+
+  db-init:
+    build: ./backend
+    container_name: pulseops-db-init
+    command: python init_db.py
+    environment:
+      - CASSANDRA_HOSTS=cassandra-1,cassandra-2,cassandra-3
+      - CASSANDRA_DC=dc1
+    depends_on:
+      - cassandra-1
+      - cassandra-2
+      - cassandra-3
 
   backend:
     build: ./backend
@@ -13,9 +74,12 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - CASSANDRA_HOST=cassandra
+      - CASSANDRA_HOSTS=cassandra-1,cassandra-2,cassandra-3
+      - CASSANDRA_DC=dc1
     depends_on:
-      - cassandra
+      - db-init
 
 volumes:
-  cassandra-data:
+  cassandra-data-1:
+  cassandra-data-2:
+  cassandra-data-3:

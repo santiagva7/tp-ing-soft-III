@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  # Nodo Cassandra del agente que se une al cluster principal
+  cassandra-agent:
+    image: cassandra:5.0
+    container_name: pulseops-agent-cassandra
+    hostname: cassandra-agent
+    environment:
+      # Cluster configuration
+      - CASSANDRA_CLUSTER_NAME=PulseOpsCluster  # MISMO nombre que el cluster principal
+      - CASSANDRA_DC=dc1                         # MISMO datacenter
+      - CASSANDRA_RACK=rack-agent                # Rack único para este agente
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      
+      # Seeds: Los nodos del cluster principal
+      - CASSANDRA_SEEDS=host.docker.internal:9042
+      
+      # Recursos limitados (es un agente, no storage pesado)
+      - HEAP_NEWSIZE=128M
+      - MAX_HEAP_SIZE=512M
+    ports:
+      - "9043:9042"  # Puerto diferente para no colisionar
+    volumes:
+      - cassandra-agent-data:/var/lib/cassandra
+    deploy:
+      resources:
+        limits:
+          memory: 1.5g  # Menos memoria que los nodos principales
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s  # Más tiempo porque debe conectarse al cluster remoto
+    extra_hosts:
+      # Permitir que este nodo encuentre el cluster principal
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  cassandra-agent-data:

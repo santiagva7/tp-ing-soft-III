@@ -1,5 +1,5 @@
 services:
-  pulse-ops-node:
+  pulse-ops-agent:
     build:
       context: .
       dockerfile: Dockerfile
@@ -12,4 +12,53 @@ services:
       - OTEL_SERVICE_NAME=pulse-ops-node
       - CUSTOMER_ID=customer-123
       - NODE_ENV=production
+      # Cassandra connection (nodo local del agente)
+      - CASSANDRA_CONTACT_POINTS=cassandra-agent:9042
+      - CASSANDRA_KEYSPACE=pulseops
+      - CASSANDRA_LOCAL_DC=dc1
+    networks:
+      - default
+      - cassandra-agent-net
+    depends_on:
+      - cassandra-agent
     restart: unless-stopped
+
+  # Nodo Cassandra del agente (integrado aquí)
+  cassandra-agent:
+    image: cassandra:5.0
+    container_name: pulseops-agent-cassandra
+    hostname: cassandra-agent
+    environment:
+      - CASSANDRA_CLUSTER_NAME=PulseOpsCluster
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_RACK=rack-agent
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - CASSANDRA_SEEDS=host.docker.internal:9042
+      - HEAP_NEWSIZE=128M
+      - MAX_HEAP_SIZE=512M
+    ports:
+      - "9043:9042"
+    volumes:
+      - cassandra-agent-data:/var/lib/cassandra
+    deploy:
+      resources:
+        limits:
+          memory: 1.5g
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - cassandra-agent-net
+    restart: unless-stopped
+
+networks:
+  cassandra-agent-net:
+    driver: bridge
+
+volumes:
+  cassandra-agent-data:

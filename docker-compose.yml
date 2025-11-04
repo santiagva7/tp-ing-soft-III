@@ -1,13 +1,15 @@
 version: '3.8'
+
 services:
   cassandra-1:
     image: cassandra:latest
     container_name: pulseops-db-1
     environment:
       - CASSANDRA_CLUSTER_NAME=PulseOpsCluster
+      - CASSANDRA_SEEDS=pulseops-db-1,pulseops-db-2,pulseops-db-3
       - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
       - HEAP_NEWSIZE=256M
-      - MAX_HEAP_SIZE=1G 
+      - MAX_HEAP_SIZE=1G
     ports:
       - "9042:9042"
     volumes:
@@ -16,14 +18,14 @@ services:
     deploy:
       resources:
         limits:
-          memory: 3g #memoria
+          memory: 3g
 
   cassandra-2:
     image: cassandra:latest
     container_name: pulseops-db-2
     environment:
       - CASSANDRA_CLUSTER_NAME=PulseOpsCluster
-      - CASSANDRA_SEEDS=cassandra-1
+      - CASSANDRA_SEEDS=pulseops-db-1,pulseops-db-2,pulseops-db-3
       - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
       - HEAP_NEWSIZE=256M
       - MAX_HEAP_SIZE=1G
@@ -42,7 +44,7 @@ services:
     container_name: pulseops-db-3
     environment:
       - CASSANDRA_CLUSTER_NAME=PulseOpsCluster
-      - CASSANDRA_SEEDS=cassandra-1
+      - CASSANDRA_SEEDS=pulseops-db-1,pulseops-db-2,pulseops-db-3
       - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
       - HEAP_NEWSIZE=256M
       - MAX_HEAP_SIZE=1G
@@ -61,7 +63,7 @@ services:
     container_name: pulseops-db-init
     command: python init_db.py
     environment:
-      - CASSANDRA_HOSTS=cassandra-1,cassandra-2,cassandra-3
+      - CASSANDRA_HOSTS=pulseops-db-1,pulseops-db-2,pulseops-db-3
       - CASSANDRA_DC=dc1
     depends_on:
       - cassandra-1
@@ -74,7 +76,7 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - CASSANDRA_HOSTS=cassandra-1,cassandra-2,cassandra-3
+      - CASSANDRA_HOSTS=pulseops-db-1,pulseops-db-2,pulseops-db-3
       - CASSANDRA_DC=dc1
     depends_on:
       - db-init

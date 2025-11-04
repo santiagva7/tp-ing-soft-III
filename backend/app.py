@@ -7,7 +7,7 @@ from datetime import datetime
 # --- Configuración ---
 # Leemos el host de Cassandra desde una variable de entorno
 # Docker Compose se encargará de dársela.
-CASSANDRA_HOST = os.environ.get('CASSANDRA_HOST', '127.0.0.1')
+CASSANDRA_HOST = os.environ.get('CASSANDRA_HOST', 'pulseops-db-1')
 KEYSPACE = 'pulseops'
 
 # --- Configuración de Logging ---

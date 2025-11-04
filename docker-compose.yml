@@ -19,6 +19,11 @@ services:
       resources:
         limits:
           memory: 3g
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
 
   cassandra-2:
     image: cassandra:latest
@@ -38,6 +43,11 @@ services:
       resources:
         limits:
           memory: 3g
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
 
   cassandra-3:
     image: cassandra:latest
@@ -57,6 +67,11 @@ services:
       resources:
         limits:
           memory: 3g
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
 
   db-init:
     build: ./backend
@@ -66,9 +81,12 @@ services:
       - CASSANDRA_HOSTS=pulseops-db-1,pulseops-db-2,pulseops-db-3
       - CASSANDRA_DC=dc1
     depends_on:
-      - cassandra-1
-      - cassandra-2
-      - cassandra-3
+      cassandra-1:
+        condition: service_healthy
+      cassandra-2:
+        condition: service_healthy
+      cassandra-3:
+        condition: service_healthy
 
   backend:
     build: ./backend
@@ -76,10 +94,17 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - CASSANDRA_HOSTS=pulseops-db-1,pulseops-db-2,pulseops-db-3
+      - CASSANDRA_HOST=pulseops-db-1
       - CASSANDRA_DC=dc1
     depends_on:
-      - db-init
+      cassandra-1:
+        condition: service_healthy
+      cassandra-2:
+        condition: service_healthy
+      cassandra-3:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
 
 volumes:
   cassandra-data-1:

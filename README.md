@@ -6,12 +6,14 @@ Sistema de observabilidad SaaS para monitoreo de infraestructura de clientes med
 
 ```
 tp-ing-soft-III/
-├── services/
-│   ├── storage/          # Cluster Cassandra (3 nodos dc1)
-│   ├── agent/
-│   │   ├── cassandra/    # Nodo edge Cassandra (dc2)
-│   │   └── collector/    # Collector OTLP + Adapter
-│   └── monitor/          # Grafana + API REST
+│
+├── storage/
+│   └── cassandra/         # Cluster Cassandra (3 nodos dc1)
+├── agent/
+│   ├── cassandra/         # Nodo edge Cassandra (dc2)
+│   ├── collector/         # Collector OTLP + Adapter
+│   └── pulse-ops-node/    # Agente generador de métricas
+├── monitor/               # Grafana + API REST
 └── README.md
 ```
 
@@ -22,7 +24,7 @@ tp-ing-soft-III/
 ### 1. Cluster Cassandra Central (dc1)
 
 ```bash
-cd services/storage/cassandra
+cd storage/cassandra
 docker compose up -d
 ```
 
@@ -36,7 +38,7 @@ docker exec -it pulseops-db-1 nodetool status
 ### 2. Nodo Edge Cassandra (dc2)
 
 ```bash
-cd services/agent/cassandra
+cd agent/cassandra
 docker compose up -d
 ```
 
@@ -52,7 +54,7 @@ docker exec -it pulseops-agent-cassandra nodetool status
 ### 3. Collector OTLP + Adapter
 
 ```bash
-cd services/agent/collector
+cd agent/collector
 docker compose up -d
 ```
 
@@ -66,18 +68,18 @@ docker logs pulseops-cassandra-adapter --tail 10
 ### 4. Agente Pulse-Ops (Generador de Métricas)
 
 ```bash
-cd services/agent
+cd agent/pulse-ops-node
 docker compose up -d
 ```
 
 ### 5. Monitoreo (Grafana + API)
 
 ```bash
-cd services/monitor
+cd monitor
 docker compose up -d
 ```
 
-Acceder a Grafana: http://localhost:3001 (admin/admin)
+Acceder a Grafana: <http://localhost:3000> (admin/admin)
 
 ---
 
@@ -155,10 +157,9 @@ docker exec -it pulseops-db-1 cqlsh -e "SELECT COUNT(*) FROM pulseops.metrics;"
 
 ## 📚 Documentación Detallada
 
-- [Agent](services/agent/README.md)
-- [Collector](services/agent/collector/README.md)
-- [Storage](services/storage/README.md)
-- [Monitor](services/monitor/README.md)
+- [Agent](agent/README.md)
+- [Collector](agent/collector/README.md)
+- [Storage](storage/README.md)
 
 ---
 

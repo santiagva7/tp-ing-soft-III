@@ -37,7 +37,7 @@ const client = new cassandra.Client({
     readTimeout: 30000,
   },
   queryOptions: {
-    consistency: cassandra.types.consistencies.localQuorum,
+    consistency: cassandra.types.consistencies.localOne,  // LOCAL_ONE: escribe en 1 réplica del DC local (funciona cuando edge está aislado)
     prepare: true,
   },
   policies: {

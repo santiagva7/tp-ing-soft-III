@@ -69,7 +69,36 @@ CASSANDRA_RACK: rack-agent               # Único para este agente
 CASSANDRA_SEEDS: host.docker.internal:9042  # IP del cluster principal
 ```
 
-## 🔧 Uso desde la aplicación
+## � Auto-Repair durante Particiones de Red
+
+Este nodo agente implementa un **sistema híbrido de auto-reparación** para mantener consistencia de datos incluso después de particiones de red o desconexiones temporales del cluster principal.
+
+### 📚 Documentación completa
+
+Para información detallada sobre el sistema de auto-repair, incluyendo:
+- Arquitectura y componentes (CL=ONE + Read Repair + Health Monitor)
+- Procedimiento completo de testing (simulación de particiones)
+- Monitoreo y troubleshooting
+- Consideraciones de performance
+
+**Ver: [AUTO-REPAIR-GUIDE.md](./AUTO-REPAIR-GUIDE.md)**
+
+### ⚡ Resumen rápido
+
+El sistema garantiza que:
+1. **Durante desconexión**: Las escrituras continúan exitosamente (Consistency Level: ONE)
+2. **Durante operación normal**: 20% de lecturas activan reparación automática (Read Repair)
+3. **Al reconectarse**: Un health monitor detecta la reconexión y ejecuta reparación completa
+
+```bash
+# Ver logs del health monitor
+docker logs -f pulseops-agent-health-monitor
+
+# Verificar estado de reparación
+docker exec -it pulseops-agent-cassandra nodetool netstats
+```
+
+## �🔧 Uso desde la aplicación
 
 ### Conectarse al nodo local (baja latencia):
 

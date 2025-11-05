@@ -35,7 +35,14 @@ docker exec -it pulseops-db-1 nodetool status
 # Debe mostrar 3 nodos UN (Up/Normal) en dc1
 ```
 
-### 2. Nodo Edge Cassandra (dc2)
+### 2. Collector OTLP + Adapter
+
+```bash
+cd agent/collector
+docker compose up -d
+```
+
+### 3. Nodo Edge Cassandra (dc2)
 
 ```bash
 cd agent/cassandra
@@ -49,13 +56,6 @@ docker exec -it pulseops-agent-cassandra nodetool status
 # Debe mostrar:
 # Datacenter: dc1 (3 nodos)
 # Datacenter: dc2 (1 nodo)
-```
-
-### 3. Collector OTLP + Adapter
-
-```bash
-cd agent/collector
-docker compose up -d
 ```
 
 

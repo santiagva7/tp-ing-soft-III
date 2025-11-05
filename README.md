@@ -58,18 +58,19 @@ cd agent/collector
 docker compose up -d
 ```
 
-Verificar que está escribiendo:
-
-```bash
-docker logs pulseops-cassandra-adapter --tail 10
-# Debe mostrar: "✅ Metrics written to Cassandra"
-```
 
 ### 4. Agente Pulse-Ops (Generador de Métricas)
 
 ```bash
 cd agent/pulse-ops-node
 docker compose up -d
+```
+
+Verificar que está escribiendo:
+
+```bash
+docker logs pulseops-cassandra-adapter --tail 10
+# Debe mostrar: "✅ Metrics written to Cassandra"
 ```
 
 ### 5. Monitoreo (Grafana + API)

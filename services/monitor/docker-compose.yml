@@ -1,6 +1,27 @@
 version: "3.8"
 
 services:
+  cassandra-api:
+    build: ./cassandra-api
+    container_name: monitor-cassandra-api
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      - CASSANDRA_HOST=pulseops-db-1
+      - CASSANDRA_PORT=9042
+      - CASSANDRA_DC=dc1
+      - PORT=3002
+    networks:
+      - observability
+      - cassandra_cassandra-net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  
   grafana:
     image: grafana/grafana:latest
     container_name: monitor-grafana
@@ -11,15 +32,23 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource
     volumes:
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - grafana-data:/var/lib/grafana
     networks:
       - observability
-      - prometeus_default  
+    depends_on:
+      cassandra-api:
+        condition: service_healthy
+
+volumes:
+  grafana-data:
 
 networks:
   observability:
     driver: bridge
-  prometeus_default:
+  cassandra_cassandra-net:
     external: true
+    name: cassandra_cassandra-net

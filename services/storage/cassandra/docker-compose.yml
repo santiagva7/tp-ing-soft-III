@@ -114,6 +114,7 @@ services:
           time_bucket text,
           timestamp timestamp,
           value double,
+          customer_id text,
           PRIMARY KEY ((node_id, metric_name, time_bucket), timestamp)
         ) WITH CLUSTERING ORDER BY (timestamp DESC)
           AND default_time_to_live = 2592000;

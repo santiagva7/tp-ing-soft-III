@@ -1,12 +1,13 @@
 apiVersion: 1
 
 datasources:
-  - name: Prometheus-Hot
-    type: prometheus
+  # Cassandra via REST API (Infinity plugin)
+  - name: Cassandra-API
+    type: yesoreyeram-infinity-datasource
     access: proxy
-    url: http://prometheus-hot:9090
+    uid: cassandra-api
+    url: http://cassandra-api:3002
     isDefault: true
     jsonData:
-      timeInterval: "15s"
-      queryTimeout: "30s"
-      httpMethod: "POST"
+      tlsSkipVerify: true
+    editable: true

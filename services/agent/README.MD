@@ -1,12 +1,288 @@
-# OpenTelemetry Agent - Agente de Monitoreo
+# 🏗️ Arquitectura del Agente PulseOps
 
-## 📋 Descripción
+## 📊 Flujo de Datos Actualizado
 
-El **Agent** es una aplicación ligera escrita en Go que implementa el SDK de OpenTelemetry. Se despliega en cada nodo del cliente y es responsable de generar, capturar y exportar telemetría (métricas, trazas y logs) en tiempo real al Collector central.
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                       AGENT NODE (Edge Device)                        │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│  ┌─────────────────────┐                                             │
+│  │  pulse-ops-node     │  Métricas del sistema:                      │
+│  │  (Next.js 16)       │  • system.cpu.percent                       │
+│  │                     │  • system.memory.percent                    │
+│  └──────────┬──────────┘                                             │
+│             │                                                          │
+│             │ OTLP/gRPC                                               │
+│             │ localhost:4317                                          │
+│             ▼                                                          │
+│  ┌─────────────────────┐                                             │
+│  │  collector-agent    │  Procesa:                                   │
+│  │  (OTel Collector)   │  • Batch                                    │
+│  │                     │  • Attributes (collector.name, node.id)     │
+│  │                     │  • Resource detection                       │
+│  └──────────┬──────────┘                                             │
+│             │                                                          │
+│             │ OTLP/HTTP                                               │
+│             │ cassandra-adapter:8080                                  │
+│             ▼                                                          │
+│  ┌─────────────────────┐                                             │
+│  │  cassandra-adapter  │  Convierte OTLP → CQL:                      │
+│  │  (Node.js HTTP)     │  • Parsea resourceMetrics                   │
+│  │                     │  • Extrae node_id, customer_id              │
+│  │                     │  • INSERT batch a Cassandra                 │
+│  └──────────┬──────────┘                                             │
+│             │                                                          │
+│             │ CQL Protocol                                            │
+│             │ cassandra-agent:9042                                    │
+│             ▼                                                          │
+│  ┌─────────────────────┐                                             │
+│  │  cassandra-agent    │  Cluster member:                            │
+│  │  (Cassandra 5.0)    │  • Cluster: PulseOpsCluster                 │
+│  │                     │  • DC: dc1, Rack: rack4                     │
+│  │                     │  • Seeds: cassandra-1,2,3                   │
+│  └──────────┬──────────┘                                             │
+│             │                                                          │
+│             │ Gossip Protocol                                         │
+│             │ (Auto-replication)                                      │
+└─────────────┼──────────────────────────────────────────────────────┘
+              │
+              │ Cluster Sync
+              ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                    CENTRAL INFRASTRUCTURE                             │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │                  Cassandra Cluster (dc1)                      │   │
+│  │                                                                │   │
+│  │    ┌────────────┐    ┌────────────┐    ┌────────────┐        │   │
+│  │    │cassandra-1 │    │cassandra-2 │    │cassandra-3 │        │   │
+│  │    │  (rack1)   │◄──►│  (rack2)   │◄──►│  (rack3)   │        │   │
+│  │    └─────┬──────┘    └──────┬─────┘    └──────┬─────┘        │   │
+│  │          │                   │                  │              │   │
+│  │          └───────────────────┼──────────────────┘              │   │
+│  │                              │                                 │   │
+│  │                              │ Gossip + Replication            │   │
+│  │                              │                                 │   │
+│  │                       ┌──────▼──────┐                          │   │
+│  │                       │cassandra-   │◄─────────────────────────┼───┤
+│  │                       │   agent     │  Cluster Member          │   │
+│  │                       │  (rack4)    │                          │   │
+│  │                       └─────────────┘                          │   │
+│  │                                                                 │   │
+│  │  Keyspace: pulseops                                            │   │
+│  │  Replication: NetworkTopologyStrategy, RF=3                    │   │
+│  │  Datos replicados automáticamente a 4 nodos                    │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+```
 
-## 🎯 Propósito
+## 🚀 Componentes
 
-Proporcionar **observabilidad completa** de los nodos de los clientes sin requerir cambios en sus aplicaciones, con mínimo overhead de recursos y máxima simplicidad operacional.
+### 1. pulse-ops-node (Next.js 16)
+- **Función**: Aplicación web que genera métricas del sistema
+- **Tecnología**: Next.js 16 + OpenTelemetry SDK
+- **Métricas**:
+  - `system.cpu.percent`: Porcentaje de CPU usado
+  - `system.memory.percent`: Porcentaje de RAM usado
+- **Export**: OTLP/gRPC a `localhost:4317`
+- **Frecuencia**: Cada 5 segundos
+- **⚠️ Cambio importante**: Ya NO escribe directamente a Cassandra
+
+### 2. collector-agent (OpenTelemetry Collector)
+- **Función**: Recibe y procesa métricas OTLP
+- **Tecnología**: otel/opentelemetry-collector-contrib
+- **Processors**:
+  - `memory_limiter`: Limita uso de memoria (256MB)
+  - `resource`: Detecta hostname, OS, etc.
+  - `attributes`: Agrega `collector.name`, `collector.type`
+  - `batch`: Agrupa métricas (timeout 10s)
+- **Export**: OTLP/HTTP a `cassandra-adapter:8080`
+
+### 3. cassandra-adapter (Node.js HTTP Server)
+- **Función**: Convierte OTLP → CQL
+- **Tecnología**: Express + cassandra-driver
+- **Endpoint**: POST `/v1/metrics`
+- **Proceso**:
+  1. Recibe `resourceMetrics` OTLP
+  2. Extrae `node_id`, `customer_id`, métricas
+  3. Convierte timestamps (nano → Date)
+  4. Genera `time_bucket` (YYYY-MM-DD)
+  5. INSERT batch a Cassandra
+- **Retry**: Configurado en el collector (retry_on_failure)
+
+### 4. cassandra-agent (Cassandra Node)
+- **Función**: Nodo del cluster Cassandra
+- **Tecnología**: Cassandra 5.0
+- **Configuración**:
+  - Cluster: `PulseOpsCluster`
+  - Datacenter: `dc1`, Rack: `rack4`
+  - Seeds: `cassandra-1`, `cassandra-2`, `cassandra-3`
+  - Snitch: `GossipingPropertyFileSnitch`
+- **Replicación**: Miembro completo del cluster (recibe replicaciones automáticas)
+
+## 📋 Schema de Cassandra
+
+```sql
+CREATE KEYSPACE pulseops
+WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 3};
+
+CREATE TABLE pulseops.metrics (
+  node_id text,
+  metric_name text,
+  time_bucket text,
+  timestamp timestamp,
+  value double,
+  customer_id text,
+  PRIMARY KEY ((node_id, metric_name, time_bucket), timestamp)
+) WITH CLUSTERING ORDER BY (timestamp DESC)
+  AND default_time_to_live = 2592000;  -- 30 días TTL
+```
+
+**Partition Key**: `(node_id, metric_name, time_bucket)`
+- Distribuye datos por nodo + métrica + día
+- Permite queries eficientes por nodo/métrica
+
+**Clustering Key**: `timestamp DESC`
+- Ordena métricas de más reciente a más antigua
+- Ideal para time-series
+
+## 🔧 Despliegue
+
+### Prerequisitos
+1. Docker y Docker Compose instalados
+2. Cluster Cassandra central levantado (cassandra-1,2,3)
+
+### Orden de inicio
+
+1. **Cluster Cassandra Central** (si no está levantado):
+```powershell
+cd services/storage/cassandra
+docker-compose up -d
+# Esperar init: docker logs -f pulseops-db-init
+```
+
+2. **Agente (Cassandra + Collector + Adapter)**:
+```powershell
+cd services/agent/collector
+docker-compose up -d
+# Esto levanta: cassandra-agent, cassandra-adapter, collector-agent
+```
+
+3. **Aplicación Next.js**:
+```powershell
+cd services/agent/pulse-ops-node
+npm install  # Remover cassandra-driver del lockfile
+npm run dev
+```
+
+### Verificar funcionamiento
+
+1. **Logs del collector**:
+```powershell
+docker logs -f pulseops-collector-agent
+```
+
+2. **Logs del adapter**:
+```powershell
+docker logs -f pulseops-cassandra-adapter
+```
+
+3. **Estado del cluster**:
+```powershell
+docker exec pulseops-agent-cassandra nodetool status
+# Debe mostrar 4 nodos (cassandra-1,2,3 + agent)
+```
+
+4. **Consultar métricas**:
+```powershell
+docker exec -it pulseops-agent-cassandra cqlsh
+```
+```sql
+SELECT * FROM pulseops.metrics 
+WHERE node_id = 'DESKTOP-XXX' 
+AND metric_name = 'system.cpu.percent' 
+AND time_bucket = '2025-11-04' 
+LIMIT 10;
+```
+
+## 🎯 Ventajas de esta arquitectura
+
+| Ventaja | Descripción |
+|---------|-------------|
+| **🔄 Separación de responsabilidades** | App solo genera métricas, collector procesa, adapter persiste |
+| **📊 Sin acoplamiento** | App Next.js NO conoce Cassandra (solo OTLP) |
+| **🛡️ Alta disponibilidad** | RF=3 + 1 agente = 4 nodos con datos |
+| **⚡ Replicación automática** | Gossip Protocol sincroniza todos los nodos |
+| **🔧 Extensible** | Agregar nuevos exporters sin modificar la app |
+| **📈 Escalable** | Agregar más agentes = agregar nodos al cluster |
+| **🐛 Debugging** | Cada componente tiene logs independientes |
+
+## 🚨 Cambios importantes
+
+### ✅ Removido de pulse-ops-node:
+- ❌ Cliente de Cassandra (`lib/cassandra.ts`)
+- ❌ Escritura directa a Cassandra (`saveToCassandra()`)
+- ❌ Dependencia `cassandra-driver`
+- ✅ Solo mantiene OpenTelemetry SDK
+
+### ✅ Agregado:
+- ✅ `cassandra-adapter` (nuevo servicio Node.js)
+- ✅ `collector-agent` (renombrado de `otel-collector`)
+- ✅ Campo `customer_id` en tabla metrics
+
+### ⚠️ Antes de levantar:
+```powershell
+# Limpiar node_modules y reinstalar
+cd services/agent/pulse-ops-node
+Remove-Item -Recurse -Force node_modules
+npm install
+```
+
+## 📚 Variables de entorno
+
+### pulse-ops-node (.env.local)
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+OTEL_SERVICE_NAME=pulse-ops-node
+CUSTOMER_ID=customer-123
+NODE_ENV=production
+```
+
+### cassandra-adapter
+```env
+CASSANDRA_HOST=cassandra-agent
+CASSANDRA_PORT=9042
+CASSANDRA_DC=dc1
+PORT=8080
+```
+
+## 🔍 Troubleshooting
+
+### Problema: Adapter no conecta a Cassandra
+```powershell
+# Verificar que cassandra-agent esté en el mismo network
+docker network inspect cassandra_cassandra-net
+```
+
+### Problema: Métricas no llegan
+1. Verificar logs del collector: `docker logs pulseops-collector-agent`
+2. Verificar health del adapter: `curl http://localhost:8080/health`
+3. Verificar connectivity: `docker exec pulseops-collector-agent ping cassandra-adapter`
+
+### Problema: Cluster no sincroniza
+```powershell
+# Verificar seeds en cassandra-agent
+docker exec pulseops-agent-cassandra nodetool describecluster
+```
+
+---
+
+**Versión**: 2.0.0  
+**Última actualización**: Noviembre 4, 2025  
+**Stack**: Next.js 16 + OpenTelemetry + Cassandra 5.0
 
 ---
 

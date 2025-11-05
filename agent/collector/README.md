@@ -10,7 +10,7 @@ Recibe telemetría OTLP de agentes y escribe directamente en Cassandra.
 ## 🚀 Despliegue
 
 ```bash
-cd services/agent/collector
+cd agent/collector
 docker compose up -d
 ```
 

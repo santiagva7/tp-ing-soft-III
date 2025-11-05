@@ -1,9 +1,0 @@
-# Datos de Prometheus
-data/
-
-# Logs
-*.log
-
-# Snapshots y backups
-snapshots/
-backup/

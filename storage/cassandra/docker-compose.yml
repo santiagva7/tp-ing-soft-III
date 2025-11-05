@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  cassandra-1:
+    image: cassandra:5.0
+    container_name: pulseops-db-1
+    hostname: cassandra-1
+    environment:
+      - CASSANDRA_CLUSTER_NAME=PulseOpsCluster
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_RACK=rack1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - CASSANDRA_SEEDS=cassandra-1,cassandra-2,cassandra-3
+      - HEAP_NEWSIZE=256M
+      - MAX_HEAP_SIZE=1G
+    ports:
+      - "9042:9042"
+    volumes:
+      - cassandra-data-1:/var/lib/cassandra
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - cassandra-net
+
+  cassandra-2:
+    image: cassandra:5.0
+    container_name: pulseops-db-2
+    hostname: cassandra-2
+    environment:
+      - CASSANDRA_CLUSTER_NAME=PulseOpsCluster
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_RACK=rack2
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - CASSANDRA_SEEDS=cassandra-1,cassandra-2,cassandra-3
+      - HEAP_NEWSIZE=256M
+      - MAX_HEAP_SIZE=1G
+    volumes:
+      - cassandra-data-2:/var/lib/cassandra
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      cassandra-1:
+        condition: service_healthy
+    networks:
+      - cassandra-net
+
+  cassandra-3:
+    image: cassandra:5.0
+    container_name: pulseops-db-3
+    hostname: cassandra-3
+    environment:
+      - CASSANDRA_CLUSTER_NAME=PulseOpsCluster
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_RACK=rack3
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - CASSANDRA_SEEDS=cassandra-1,cassandra-2,cassandra-3
+      - HEAP_NEWSIZE=256M
+      - MAX_HEAP_SIZE=1G
+    volumes:
+      - cassandra-data-3:/var/lib/cassandra
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      cassandra-1:
+        condition: service_healthy
+      cassandra-2:
+        condition: service_healthy
+    networks:
+      - cassandra-net
+
+  cassandra-init:
+    image: cassandra:5.0
+    container_name: pulseops-db-init
+    command: >
+      bash -c "
+      echo '⏳ Esperando que Cassandra esté listo...' &&
+      until cqlsh cassandra-1 9042 -e 'DESCRIBE KEYSPACES' > /dev/null 2>&1; do
+        echo '⏳ Reintentando en 5 segundos...' &&
+        sleep 5;
+      done &&
+      echo '✅ Cassandra listo!' &&
+      echo '📊 Creando keyspace y tablas...' &&
+      cqlsh cassandra-1 9042 -e \"
+        CREATE KEYSPACE IF NOT EXISTS pulseops
+        WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 3};
+        
+        USE pulseops;
+        
+        CREATE TABLE IF NOT EXISTS metrics (
+          node_id text,
+          metric_name text,
+          time_bucket text,
+          timestamp timestamp,
+          value double,
+          customer_id text,
+          PRIMARY KEY ((node_id, metric_name, time_bucket), timestamp)
+        ) WITH CLUSTERING ORDER BY (timestamp DESC)
+          AND default_time_to_live = 2592000;
+      \" &&
+      echo '🎉 Inicialización completada!' &&
+      cqlsh cassandra-1 9042 -e 'DESCRIBE KEYSPACE pulseops'
+      "
+    depends_on:
+      cassandra-1:
+        condition: service_healthy
+      cassandra-2:
+        condition: service_healthy
+      cassandra-3:
+        condition: service_healthy
+    networks:
+      - cassandra-net
+    restart: "no"
+
+volumes:
+  cassandra-data-1:
+  cassandra-data-2:
+  cassandra-data-3:
+
+networks:
+  cassandra-net:
+    driver: bridge
+

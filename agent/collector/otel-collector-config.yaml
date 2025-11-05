@@ -1,0 +1,85 @@
+# otel-collector-config.yaml
+# OpenTelemetry Collector Agent - Configuración del Agente
+
+receivers:
+  # Recibir telemetría de la app pulse-ops-node vía OTLP
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Agrupar datos en lotes para eficiencia
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+  
+  # Agregar metadata del agente
+  attributes:
+    actions:
+      - key: collector.name
+        value: collector-agent
+        action: insert
+      - key: collector.type
+        value: edge-agent
+        action: insert
+  
+  # Detectar información del resource (hostname, OS, etc.)
+  resource:
+    attributes:
+      - key: service.instance.id
+        from_attribute: host.name
+        action: upsert
+  
+  # Limitar uso de memoria
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+
+exporters:
+  # Debug exporter (para troubleshooting)
+  debug:
+    verbosity: normal
+    sampling_initial: 5
+    sampling_thereafter: 200
+  
+  # Exporter HTTP hacia Cassandra Adapter
+  otlphttp/cassandra:
+    endpoint: "http://cassandra-adapter:8080"
+    encoding: json
+    tls:
+      insecure: true
+    timeout: 30s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 2
+      queue_size: 1000
+
+extensions:
+  # Health check endpoint
+  health_check:
+    endpoint: "0.0.0.0:13133"
+    path: "/health"
+  
+  # Métricas internas del collector
+  zpages:
+    endpoint: "0.0.0.0:55679"
+
+service:
+  extensions: [health_check, zpages]
+  
+  pipelines:
+    # Pipeline de métricas -> Cassandra
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, attributes, batch]
+      exporters: [debug, otlphttp/cassandra]

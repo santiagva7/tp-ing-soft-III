@@ -7,13 +7,13 @@ services:
     container_name: pulseops-agent-cassandra
     hostname: cassandra-agent
     environment:
-      # Cluster configuration - SE UNE AL CLUSTER PRINCIPAL
+      # Cluster configuration - DATACENTER SEPARADO para autonomía durante aislamiento
       - CASSANDRA_CLUSTER_NAME=PulseOpsCluster       # MISMO nombre que cluster central
-      - CASSANDRA_DC=dc1                              # Mismo datacenter
-      - CASSANDRA_RACK=rack4                          # Rack diferente (high availability)
+      - CASSANDRA_DC=dc2                              # Datacenter SEPARADO (autónomo)
+      - CASSANDRA_RACK=rack1                          # Rack 1 de dc2
       - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch  # Snitch para cluster distribuido
       
-      # Seeds: Nodos del cluster central (para unirse al cluster)
+      # Seeds: Nodos del cluster central (para replicación entre DCs)
       - CASSANDRA_SEEDS=cassandra-1,cassandra-2,cassandra-3
       
       # Recursos ajustados para agente edge
@@ -23,6 +23,14 @@ services:
       - "9043:9042"  # Puerto expuesto diferente (interno usa 9042)
     volumes:
       - cassandra-agent-data:/var/lib/cassandra
+    command: >
+      bash -c "
+      echo 'dc=dc2' > /etc/cassandra/cassandra-rackdc.properties &&
+      echo 'rack=rack1' >> /etc/cassandra/cassandra-rackdc.properties &&
+      echo 'prefer_local=true' >> /etc/cassandra/cassandra-rackdc.properties &&
+      chown cassandra:cassandra /etc/cassandra/cassandra-rackdc.properties &&
+      exec /usr/local/bin/docker-entrypoint.sh cassandra -f
+      "
     deploy:
       resources:
         limits:
@@ -34,7 +42,8 @@ services:
       retries: 10
       start_period: 90s  # Más tiempo para join al cluster remoto
     networks:
-      - cassandra-net  # MISMO network que el cluster central
+      - cassandra-net      # Network del cluster central (para gossip/replicación)
+      - collector-net      # Network del collector (para que adapter pueda escribir)
     restart: unless-stopped
 
   # Verificación de join al cluster (el keyspace ya existe en el cluster)
@@ -51,9 +60,13 @@ services:
       echo '✅ Cassandra Agent conectado!' &&
       echo '📊 Verificando estado del cluster...' &&
       cqlsh cassandra-agent 9042 -e 'SELECT * FROM system.peers' &&
-      echo '📊 Verificando keyspace pulseops (debe existir del cluster central)...' &&
-      cqlsh cassandra-agent 9042 -e 'DESCRIBE KEYSPACE pulseops' &&
-      echo '🎉 Nodo agente unido al cluster correctamente!' &&
+      echo '� Reconfigurando keyspace para multi-datacenter (dc1 + dc2)...' &&
+      cqlsh cassandra-agent 9042 -e \"ALTER KEYSPACE pulseops WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 3, 'dc2': 1};\" &&
+      echo '✅ Keyspace reconfigurado: dc1=3 replicas, dc2=1 replica' &&
+      echo '🔧 Configurando Read Repair automático...' &&
+      cqlsh cassandra-agent 9042 -e \"ALTER TABLE pulseops.metrics WITH dclocal_read_repair_chance = 0.2;\" &&
+      echo '✅ Read Repair configurado (20% de lecturas locales)' &&
+      echo '🎉 Nodo edge en dc2 configurado correctamente!' &&
       echo '📋 Nodos en el cluster:' &&
       nodetool -h cassandra-agent status
       "
@@ -62,6 +75,7 @@ services:
         condition: service_healthy
     networks:
       - cassandra-net
+      - collector-net
     restart: "no"
 
 volumes:
@@ -71,3 +85,7 @@ networks:
   cassandra-net:
     external: true  # Usa el network existente del cluster central
     name: cassandra_cassandra-net  # Nombre generado por docker-compose del storage
+  
+  collector-net:
+    external: true  # Network compartida con el collector para escrituras
+    name: collector_default  # Nombre de la red default del collector

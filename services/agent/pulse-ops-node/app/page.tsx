@@ -91,7 +91,7 @@ export default function Home() {
           <p className="text-gray-500 text-sm">
             Los datos se están enviando automáticamente al collector.
             <br />
-            Verifica en Prometheus: <span className="text-blue-400 font-mono">localhost:9090</span>
+            Verifica en Grafana: <span className="text-blue-400 font-mono">localhost:3000</span>
           </p>
         </div>
       </div>

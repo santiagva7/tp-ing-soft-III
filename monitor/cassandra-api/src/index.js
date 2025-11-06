@@ -54,7 +54,7 @@ app.get('/api/cpu', async (req, res) => {
     logger.info({ 
       rawParams: { from, to },
       type: { from: typeof from, to: typeof to }
-    }, '🔍 [CPU] Request received');
+    }, '[CPU] Request received');
     
     const fromDate = new Date(parseInt(from));
     const toDate = new Date(parseInt(to));

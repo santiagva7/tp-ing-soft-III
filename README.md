@@ -35,7 +35,16 @@ docker exec -it pulseops-db-1 nodetool status
 # Debe mostrar 3 nodos UN (Up/Normal) en dc1
 ```
 
-### 2. Nodo Edge Cassandra (dc2)
+### 2. Collector OTLP + Adapter (solo para crear red)
+
+```bash
+cd agent/collector
+docker compose up -d
+```
+
+**Nota**: El adapter fallará en healthcheck porque Cassandra dc2 aún no existe. Esto es esperado - solo necesitamos crear la red `collector_default`.
+
+### 3. Nodo Edge Cassandra (dc2)
 
 ```bash
 cd agent/cassandra
@@ -51,10 +60,24 @@ docker exec -it pulseops-agent-cassandra nodetool status
 # Datacenter: dc2 (1 nodo)
 ```
 
-### 3. Collector OTLP + Adapter
+### 4. Reiniciar Collector (ahora conectará correctamente)
 
 ```bash
 cd agent/collector
+docker compose restart
+```
+
+Verificar conexión del adapter:
+
+```bash
+docker logs pulseops-cassandra-adapter --tail 20
+# Debe mostrar: "✅ Connected to Cassandra cluster"
+```
+
+### 5. Agente Pulse-Ops (Generador de Métricas)
+
+```bash
+cd agent/pulse-ops-node
 docker compose up -d
 ```
 
@@ -65,14 +88,7 @@ docker logs pulseops-cassandra-adapter --tail 10
 # Debe mostrar: "✅ Metrics written to Cassandra"
 ```
 
-### 4. Agente Pulse-Ops (Generador de Métricas)
-
-```bash
-cd agent/pulse-ops-node
-docker compose up -d
-```
-
-### 5. Monitoreo (Grafana + API)
+### 6. Monitoreo (Grafana + API)
 
 ```bash
 cd monitor

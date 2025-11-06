@@ -45,6 +45,86 @@ app.get('/health', (req, res) => {
 });
 
 // ============================================
+// HELPER FUNCTIONS (Strategy Pattern)
+// ============================================
+
+// Generate time buckets for date range
+function generateTimeBuckets(fromDate, toDate) {
+  const timeBuckets = [];
+  const currentDate = new Date(fromDate);
+  while (currentDate <= toDate) {
+    timeBuckets.push(currentDate.toISOString().split('T')[0]);
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  return timeBuckets;
+}
+
+// Generic function to fetch metric data
+async function getMetricData(metricName, fromDate, toDate, logContext) {
+  logger.info({
+    fromDate: fromDate.toISOString(),
+    toDate: toDate.toISOString(),
+    metricName
+  }, `[${logContext}] Date range parsed`);
+  
+  const timeBuckets = generateTimeBuckets(fromDate, toDate);
+  
+  logger.info({ timeBuckets, count: timeBuckets.length }, `[${logContext}] Time buckets generated`);
+  
+  const allDatapoints = [];
+  
+  // Query each day
+  for (const timeBucket of timeBuckets) {
+    const query = `
+      SELECT timestamp, value, node_id
+      FROM metrics 
+      WHERE metric_name = ? 
+        AND time_bucket = ?
+        AND timestamp >= ?
+        AND timestamp <= ?
+      ALLOW FILTERING
+    `;
+    
+    try {
+      const result = await client.execute(
+        query,
+        [metricName, timeBucket, fromDate, toDate],
+        { prepare: true }
+      );
+      
+      result.rows.forEach(row => {
+        allDatapoints.push({
+          timestamp: row.timestamp.getTime(),
+          value: row.value,
+          node_id: row.node_id
+        });
+      });
+    } catch (err) {
+      logger.warn({ error: err.message, timeBucket }, 'Failed to query time bucket');
+    }
+  }
+  
+  // Sort by timestamp
+  allDatapoints.sort((a, b) => a.timestamp - b.timestamp);
+  
+  logger.info({ 
+    totalDatapoints: allDatapoints.length,
+    sample: allDatapoints[0]
+  }, `[${logContext}] All datapoints collected`);
+  
+  return allDatapoints;
+}
+
+// Format datapoints for Infinity datasource
+function formatResponse(datapoints) {
+  return datapoints.map(dp => ({
+    Time: dp.timestamp,
+    Value: dp.value,
+    node_id: dp.node_id
+  }));
+}
+
+// ============================================
 // ENDPOINT 1: CPU Metrics
 // ============================================
 app.get('/api/cpu', async (req, res) => {
@@ -59,78 +139,17 @@ app.get('/api/cpu', async (req, res) => {
     const fromDate = new Date(parseInt(from));
     const toDate = new Date(parseInt(to));
     
-    logger.info({
-      fromDate: fromDate.toISOString(),
-      toDate: toDate.toISOString(),
-      fromMs: fromDate.getTime(),
-      toMs: toDate.getTime()
-    }, '📅 [CPU] Date range parsed');
+    // Use strategy pattern: generic metric fetching
+    const datapoints = await getMetricData('system.cpu.percent', fromDate, toDate, 'CPU');
     
-    // Get all days in range
-    const timeBuckets = [];
-    const currentDate = new Date(fromDate);
-    while (currentDate <= toDate) {
-      timeBuckets.push(currentDate.toISOString().split('T')[0]);
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-    
-    logger.info({ timeBuckets, count: timeBuckets.length }, '📦 [CPU] Time buckets generated');
-    
-    const allDatapoints = [];
-    
-    // Query each day
-    for (const timeBucket of timeBuckets) {
-      const query = `
-        SELECT timestamp, value, node_id
-        FROM metrics 
-        WHERE metric_name = ? 
-          AND time_bucket = ?
-          AND timestamp >= ?
-          AND timestamp <= ?
-        ALLOW FILTERING
-      `;
-      
-      try {
-        const result = await client.execute(
-          query,
-          ['system.cpu.percent', timeBucket, fromDate, toDate],
-          { prepare: true }
-        );
-        
-        result.rows.forEach(row => {
-          allDatapoints.push({
-            timestamp: row.timestamp.getTime(),
-            value: row.value,
-            node_id: row.node_id
-          });
-        });
-      } catch (err) {
-        logger.warn({ error: err.message, timeBucket }, 'Failed to query time bucket');
-      }
-    }
-    
-    // Sort by timestamp
-    allDatapoints.sort((a, b) => a.timestamp - b.timestamp);
-    
-    logger.info({ 
-      totalDatapoints: allDatapoints.length,
-      sample: allDatapoints[0]
-    }, '📊 [CPU] All datapoints collected');
-    
-    // Format for Infinity datasource - flat array
-    const response = allDatapoints.map(dp => ({
-      Time: dp.timestamp,
-      Value: dp.value,
-      node_id: dp.node_id
-    }));
+    // Format response
+    const response = formatResponse(datapoints);
     
     logger.info({ 
       pointCount: response.length,
       firstPoint: response[0],
       lastPoint: response[response.length - 1]
-    }, '📤 [CPU] Response structure');
-    
-    logger.info({ responseJSON: JSON.stringify(response).substring(0, 500) }, '📝 [CPU] Response JSON preview');
+    }, '[CPU] Response prepared');
     
     res.json(response);
   } catch (error) {
@@ -149,83 +168,22 @@ app.get('/api/memory', async (req, res) => {
     logger.info({ 
       rawParams: { from, to },
       type: { from: typeof from, to: typeof to }
-    }, '🔍 [MEMORY] Request received');
+    }, '[MEMORY] Request received');
     
     const fromDate = new Date(parseInt(from));
     const toDate = new Date(parseInt(to));
     
-    logger.info({
-      fromDate: fromDate.toISOString(),
-      toDate: toDate.toISOString(),
-      fromMs: fromDate.getTime(),
-      toMs: toDate.getTime()
-    }, '📅 [MEMORY] Date range parsed');
+    // Use strategy pattern: generic metric fetching
+    const datapoints = await getMetricData('system.memory.percent', fromDate, toDate, 'MEMORY');
     
-    // Get all days in range
-    const timeBuckets = [];
-    const currentDate = new Date(fromDate);
-    while (currentDate <= toDate) {
-      timeBuckets.push(currentDate.toISOString().split('T')[0]);
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-    
-    logger.info({ timeBuckets, count: timeBuckets.length }, '📦 [MEMORY] Time buckets generated');
-    
-    const allDatapoints = [];
-    
-    // Query each day
-    for (const timeBucket of timeBuckets) {
-      const query = `
-        SELECT timestamp, value, node_id
-        FROM metrics 
-        WHERE metric_name = ? 
-          AND time_bucket = ?
-          AND timestamp >= ?
-          AND timestamp <= ?
-        ALLOW FILTERING
-      `;
-      
-      try {
-        const result = await client.execute(
-          query,
-          ['system.memory.percent', timeBucket, fromDate, toDate],
-          { prepare: true }
-        );
-        
-        result.rows.forEach(row => {
-          allDatapoints.push({
-            timestamp: row.timestamp.getTime(),
-            value: row.value,
-            node_id: row.node_id
-          });
-        });
-      } catch (err) {
-        logger.warn({ error: err.message, timeBucket }, 'Failed to query time bucket');
-      }
-    }
-    
-    // Sort by timestamp
-    allDatapoints.sort((a, b) => a.timestamp - b.timestamp);
-    
-    logger.info({ 
-      totalDatapoints: allDatapoints.length,
-      sample: allDatapoints[0]
-    }, '📊 [MEMORY] All datapoints collected');
-    
-    // Format for Infinity datasource - flat array
-    const response = allDatapoints.map(dp => ({
-      Time: dp.timestamp,
-      Value: dp.value,
-      node_id: dp.node_id
-    }));
+    // Format response
+    const response = formatResponse(datapoints);
     
     logger.info({ 
       pointCount: response.length,
       firstPoint: response[0],
       lastPoint: response[response.length - 1]
-    }, '📤 [MEMORY] Response structure');
-    
-    logger.info({ responseJSON: JSON.stringify(response).substring(0, 500) }, '📝 [MEMORY] Response JSON preview');
+    }, '[MEMORY] Response prepared');
     
     res.json(response);
   } catch (error) {

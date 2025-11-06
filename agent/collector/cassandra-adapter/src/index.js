@@ -49,18 +49,18 @@ const client = new cassandra.Client({
 async function connectCassandra() {
   try {
     await client.connect();
-    logger.info('✅ Connected to Cassandra cluster');
+    logger.info('Connected to Cassandra cluster');
     
     // Verify keyspace exists
     const keyspaces = await client.execute("SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = 'pulseops'");
     if (keyspaces.rows.length === 0) {
-      logger.error('❌ Keyspace "pulseops" does not exist');
+      logger.error('Keyspace "pulseops" does not exist');
       process.exit(1);
     }
-    
-    logger.info('✅ Keyspace "pulseops" verified');
+
+    logger.info('Keyspace "pulseops" verified');
   } catch (error) {
-    logger.error({ error: error.message }, '❌ Failed to connect to Cassandra');
+    logger.error({ error: error.message }, 'Failed to connect to Cassandra');
     process.exit(1);
   }
 }
@@ -142,11 +142,11 @@ app.post('/v1/metrics', async (req, res) => {
     // Execute all inserts
     await Promise.all(insertPromises);
     
-    logger.info({ inserted: insertPromises.length }, '✅ Metrics written to Cassandra');
+    logger.info({ inserted: insertPromises.length }, 'Metrics written to Cassandra');
     
     res.status(200).json({ status: 'success', inserted: insertPromises.length });
   } catch (error) {
-    logger.error({ error: error.message }, '❌ Failed to write metrics to Cassandra');
+    logger.error({ error: error.message }, 'Failed to write metrics to Cassandra');
     res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 });
@@ -182,7 +182,7 @@ const PORT = process.env.PORT || 8080;
   await connectCassandra();
   
   app.listen(PORT, '0.0.0.0', () => {
-    logger.info({ port: PORT }, '🚀 Cassandra Adapter started');
+    logger.info({ port: PORT }, 'Cassandra Adapter started');
   });
 })();
 

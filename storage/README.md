@@ -4,13 +4,13 @@ Cluster Cassandra distribuido en 2 datacenters:
 - **dc1**: 3 nodos (cassandra-1, cassandra-2, cassandra-3) - Cluster central
 - **dc2**: 1 nodo edge (cassandra-agent) - Nodo en borde
 
-## 📦 Componentes
+## Componentes
 
 - **Cassandra Cluster (dc1)**: 3 nodos con NetworkTopologyStrategy (RF=3)
 - **Keyspace**: `pulseops` con replicación dc1=3, dc2=1
 - **Consistencia**: LOCAL_ONE para operaciones locales
 
-## 🚀 Despliegue
+## Despliegue
 
 ```bash
 cd services/storage/cassandra
@@ -19,7 +19,7 @@ docker compose up -d
 
 **Esperar ~3 minutos** hasta que los nodos estén UP.
 
-## ✅ Verificación
+## Verificación
 
 ```bash
 # Ver estado del cluster
@@ -38,7 +38,7 @@ docker exec -it pulseops-db-1 nodetool status
 docker exec -it pulseops-db-1 cqlsh -e "DESCRIBE KEYSPACE pulseops;"
 ```
 
-## 📊 Consultas Útiles
+## Consultas Útiles
 
 ```bash
 # Contar métricas almacenadas

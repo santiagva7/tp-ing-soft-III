@@ -2,7 +2,7 @@
 
 Sistema de observabilidad SaaS para monitoreo de infraestructura de clientes mediante OpenTelemetry, con almacenamiento en Cassandra multi-datacenter y visualización en Grafana.
 
-## 📁 Estructura del Proyecto
+## Estructura del Proyecto
 
 ```
 tp-ing-soft-III/
@@ -19,7 +19,7 @@ tp-ing-soft-III/
 
 ---
 
-## 🚀 Inicio de Servicios (Orden Recomendado)
+## Inicio de Servicios (Orden Recomendado)
 
 ### 1. Cluster Cassandra Central (dc1)
 
@@ -71,7 +71,7 @@ Verificar conexión del adapter:
 
 ```bash
 docker logs pulseops-cassandra-adapter --tail 20
-# Debe mostrar: "✅ Connected to Cassandra cluster"
+# Debe mostrar: "Connected to Cassandra cluster"
 ```
 
 ### 5. Agente Pulse-Ops (Generador de Métricas)
@@ -85,7 +85,7 @@ Verificar que está escribiendo:
 
 ```bash
 docker logs pulseops-cassandra-adapter --tail 10
-# Debe mostrar: "✅ Metrics written to Cassandra"
+# Debe mostrar: "Metrics written to Cassandra"
 ```
 
 ### 6. Monitoreo (Grafana + API)
@@ -99,7 +99,7 @@ Acceder a Grafana: <http://localhost:3000> (admin/admin)
 
 ---
 
-## 🧪 Prueba de Desconexión/Reconexión
+## Prueba de Desconexión/Reconexión
 
 ### Objetivo
 
@@ -133,7 +133,7 @@ Start-Sleep -Seconds 30  # PowerShell (Windows)
 
 # Verificar que el adapter sigue escribiendo
 docker logs pulseops-cassandra-adapter --tail 10
-# Debe mostrar: "✅ Metrics written to Cassandra"
+# Debe mostrar: "Metrics written to Cassandra"
 
 # Contar datos en el nodo edge
 docker exec -it pulseops-agent-cassandra cqlsh -e "SELECT COUNT(*) FROM pulseops.metrics;"
@@ -164,14 +164,14 @@ docker exec -it pulseops-db-1 cqlsh -e "SELECT COUNT(*) FROM pulseops.metrics;"
 
 ### Resultados Esperados
 
-- ✅ Durante aislamiento: edge escribe localmente con CL=LOCAL_ONE
-- ✅ dc1 no recibe datos mientras está aislado
-- ✅ Tras reconexión: datos se replican automáticamente
-- ✅ 0 pérdida de datos
+- Durante aislamiento: edge escribe localmente con CL=LOCAL_ONE
+- dc1 no recibe datos mientras está aislado
+- Tras reconexión: datos se replican automáticamente
+- 0 pérdida de datos
 
 ---
 
-## 📚 Documentación Detallada
+## Documentación Detallada
 
 - [Agent](agent/README.md)
 - [Collector](agent/collector/README.md)

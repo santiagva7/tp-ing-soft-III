@@ -97,13 +97,13 @@ services:
     container_name: pulseops-db-init
     command: >
       bash -c "
-      echo '⏳ Esperando que Cassandra esté listo...' &&
+      echo 'Esperando que Cassandra esté listo...' &&
       until cqlsh cassandra-1 9042 -e 'DESCRIBE KEYSPACES' > /dev/null 2>&1; do
-        echo '⏳ Reintentando en 5 segundos...' &&
+        echo 'Reintentando en 5 segundos...' &&
         sleep 5;
       done &&
-      echo '✅ Cassandra listo!' &&
-      echo '📊 Creando keyspace y tablas...' &&
+      echo 'Cassandra listo!' &&
+      echo 'Creando keyspace y tablas...' &&
       cqlsh cassandra-1 9042 -e \"
         CREATE KEYSPACE IF NOT EXISTS pulseops
         WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 3};
@@ -121,7 +121,7 @@ services:
         ) WITH CLUSTERING ORDER BY (timestamp DESC)
           AND default_time_to_live = 2592000;
       \" &&
-      echo '🎉 Inicialización completada!' &&
+      echo 'Inicialización completada!' &&
       cqlsh cassandra-1 9042 -e 'DESCRIBE KEYSPACE pulseops'
       "
     depends_on:

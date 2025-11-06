@@ -2,19 +2,19 @@
 
 Recibe telemetría OTLP de agentes y escribe directamente en Cassandra.
 
-## 📦 Componentes
+## Componentes
 
 - **OTel Collector**: Recibe métricas OTLP (puerto 4317/4318)
 - **Cassandra Adapter**: Escribe métricas en Cassandra con tenant isolation
 
-## 🚀 Despliegue
+## Despliegue
 
 ```bash
 cd agent/collector
 docker compose up -d
 ```
 
-## ✅ Verificación
+## Verificación
 
 ```bash
 # Ver logs del collector
@@ -22,7 +22,7 @@ docker logs pulseops-otel-collector --tail 20
 
 # Ver logs del adapter
 docker logs pulseops-cassandra-adapter --tail 20
-# Debe mostrar: "✅ Metrics written to Cassandra"
+# Debe mostrar: "Metrics written to Cassandra"
 
 # Enviar métrica de prueba
 curl -X POST http://localhost:4318/v1/metrics \

@@ -32,9 +32,9 @@ const client = new cassandra.Client({
 async function connectCassandra() {
   try {
     await client.connect();
-    logger.info('✅ Connected to Cassandra cluster');
+    logger.info('Connected to Cassandra cluster');
   } catch (error) {
-    logger.error({ error: error.message }, '❌ Failed to connect to Cassandra');
+    logger.error({ error: error.message }, 'Failed to connect to Cassandra');
     process.exit(1);
   }
 }

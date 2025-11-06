@@ -52,22 +52,22 @@ services:
     container_name: pulseops-agent-init
     command: >
       bash -c "
-      echo '⏳ Esperando que Cassandra Agent esté listo y unido al cluster...' &&
+      echo 'Esperando que Cassandra Agent esté listo y unido al cluster...' &&
       until cqlsh cassandra-agent 9042 -e 'DESCRIBE KEYSPACES' > /dev/null 2>&1; do
-        echo '⏳ Reintentando en 5 segundos...' &&
+        echo 'Reintentando en 5 segundos...' &&
         sleep 5;
       done &&
-      echo '✅ Cassandra Agent conectado!' &&
-      echo '📊 Verificando estado del cluster...' &&
+      echo 'Cassandra Agent conectado!' &&
+      echo 'Verificando estado del cluster...' &&
       cqlsh cassandra-agent 9042 -e 'SELECT * FROM system.peers' &&
-      echo '� Reconfigurando keyspace para multi-datacenter (dc1 + dc2)...' &&
+      echo 'Reconfigurando keyspace para multi-datacenter (dc1 + dc2)...' &&
       cqlsh cassandra-agent 9042 -e \"ALTER KEYSPACE pulseops WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 3, 'dc2': 1};\" &&
-      echo '✅ Keyspace reconfigurado: dc1=3 replicas, dc2=1 replica' &&
-      echo '🔧 Configurando Read Repair automático...' &&
+      echo 'Keyspace reconfigurado: dc1=3 replicas, dc2=1 replica' &&
+      echo 'Configurando Read Repair automático...' &&
       cqlsh cassandra-agent 9042 -e \"ALTER TABLE pulseops.metrics WITH dclocal_read_repair_chance = 0.2;\" &&
-      echo '✅ Read Repair configurado (20% de lecturas locales)' &&
-      echo '🎉 Nodo edge en dc2 configurado correctamente!' &&
-      echo '📋 Nodos en el cluster:' &&
+      echo 'Read Repair configurado (20% de lecturas locales)' &&
+      echo 'Nodo edge en dc2 configurado correctamente!' &&
+      echo 'Nodos en el cluster:' &&
       nodetool -h cassandra-agent status
       "
     depends_on:
